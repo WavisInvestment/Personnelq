@@ -1,0 +1,674 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// 1. ORGANIZATIONS & USERS
+// ============================================
+
+model Organization {
+  id                String   @id @default(cuid())
+  name              String
+  slug              String   @unique
+  type              String   @default("corporate") // corporate | school | church | professional
+  status            String   @default("active")    // active | inactive | suspended
+
+  // Admin details
+  admin_name        String
+  admin_email       String
+  admin_phone       String?
+
+  // Subscription
+  subscription_plan String   @default("free")
+  subscription_status String @default("inactive")
+  subscription_end_date DateTime?
+  max_employees     Int      @default(10)
+
+  // Timestamps
+  created_at        DateTime @default(now())
+  updated_at        DateTime @updatedAt
+  deleted_at        DateTime?
+
+  // Relations
+  members           OrganizationMember[]
+  assessments       Assessment[]
+  submissions       AssessmentSubmission[]
+  results           AssessmentResult[]
+  invitations       EmployeeInvitation[]
+  custom_assessments CustomAssessment[]
+  payments          Payment[]
+  subscriptions     Subscription[]
+  audit_logs        AuditLog[]
+  reports           Report[]
+
+  @@index([slug])
+  @@index([type])
+  @@index([status])
+}
+
+model User {
+  id                String   @id @default(cuid())
+  email             String   @unique
+  email_verified    Boolean  @default(false)
+  email_verified_at DateTime?
+
+  // Auth
+  password_hash     String
+  password_reset_token String?
+  password_reset_expires DateTime?
+
+  // Account lockout
+  failed_login_attempts Int @default(0)
+  locked_until      DateTime?
+
+  // Profile
+  first_name        String
+  last_name         String
+  phone_number      String?
+  avatar_url        String?
+
+  // Preferences
+  preferred_language String @default("en")
+  timezone          String @default("UTC")
+
+  // Timestamps
+  created_at        DateTime @default(now())
+  updated_at        DateTime @updatedAt
+  deleted_at        DateTime?
+
+  // Relations
+  organization_members OrganizationMember[]
+  sessions          Session[]
+  assessments_created Assessment[] @relation("created_by")
+  submissions       AssessmentSubmission[]
+  results           AssessmentResult[]
+  invitations_received EmployeeInvitation[] @relation("recipient")
+  invitations_sent  EmployeeInvitation[] @relation("sender")
+  shareable_badges  ShareableBadge[]
+  audit_logs        AuditLog[] @relation("user")
+  audit_logs_actor  AuditLog[] @relation("actor")
+
+  @@index([email])
+  @@index([deleted_at])
+}
+
+model OrganizationMember {
+  id                String   @id @default(cuid())
+  user_id           String
+  organization_id   String
+
+  // Role
+  role              String   // admin | hr | employee | member
+  department        String?
+  job_title         String?
+
+  // Status
+  status            String   @default("active") // active | inactive | invited
+
+  // Permissions (JSON for flexibility)
+  permissions       String[] @default([])
+
+  // Timestamps
+  joined_at         DateTime @default(now())
+  updated_at        DateTime @updatedAt
+  deleted_at        DateTime?
+
+  // Relations
+  user              User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  organization      Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, organization_id])
+  @@index([organization_id])
+  @@index([role])
+  @@index([status])
+}
+
+// ============================================
+// 2. SESSIONS & AUTHENTICATION
+// ============================================
+
+model Session {
+  id                String   @id @default(cuid())
+  user_id           String
+
+  // Token details
+  refresh_token     String   @unique
+  token_version     Int      @default(1)
+
+  // Tracking
+  ip_address        String
+  user_agent        String
+
+  // Expiry
+  expires_at        DateTime
+
+  // Timestamps
+  created_at        DateTime @default(now())
+  updated_at        DateTime @updatedAt
+
+  // Relations
+  user              User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@index([expires_at])
+}
+
+// ============================================
+// 3. ASSESSMENTS (TESTS)
+// ============================================
+
+model Assessment {
+  id                String   @id @default(cuid())
+  organization_id   String   @default("system")
+
+  // Basic info
+  name              String
+  description       String?
+  type              String   @default("full_assessment")
+  framework         String   @default("ocean")
+  version           String   @default("1.0.0")
+
+  // Configuration
+  is_locked         Boolean  @default(false)
+  allow_retake      Boolean  @default(false)
+  retake_interval_days Int  @default(180)
+
+  // Scoring
+  total_questions   Int
+  scoring_method    String   @default("ocean")
+
+  // Timestamps
+  created_at        DateTime @default(now())
+  updated_at        DateTime @updatedAt
+  published_at      DateTime?
+  deleted_at        DateTime?
+  created_by        String?
+
+  // Relations
+  organization      Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  creator           User?    @relation("created_by", fields: [created_by], references: [id], onDelete: SetNull)
+  questions         AssessmentQuestion[]
+  submissions       AssessmentSubmission[]
+  invitations       EmployeeInvitation[]
+
+  @@index([organization_id])
+  @@index([type])
+  @@index([framework])
+  @@index([is_locked])
+}
+
+model AssessmentQuestion {
+  id                String   @id @default(cuid())
+  assessment_id     String
+
+  // Question details
+  question_number   Int
+  question_text     String
+  question_type     String   @default("likert")
+
+  // OCEAN mapping
+  ocean_trait       String?
+  ocean_direction   String?  @default("positive")
+
+  // Scoring
+  weight            Float    @default(1.0)
+  min_score         Int      @default(1)
+  max_score         Int      @default(5)
+
+  // Options
+  options           String[]
+  option_values     Int[]
+
+  // Timestamps
+  created_at        DateTime @default(now())
+  updated_at        DateTime @updatedAt
+
+  // Relations
+  assessment        Assessment @relation(fields: [assessment_id], references: [id], onDelete: Cascade)
+  answers           AssessmentAnswer[]
+
+  @@index([assessment_id])
+  @@index([ocean_trait])
+}
+
+// ============================================
+// 4. SUBMISSIONS & RESPONSES
+// ============================================
+
+model AssessmentSubmission {
+  id                String   @id @default(cuid())
+  user_id           String
+  organization_id   String
+  assessment_id     String
+
+  // Submission status
+  status            String   @default("in_progress")
+
+  // Progress tracking
+  current_question  Int      @default(0)
+  progress_percent  Int      @default(0)
+
+  // Timing
+  started_at        DateTime @default(now())
+  completed_at      DateTime?
+  last_activity_at  DateTime @updatedAt
+  duration_seconds  Int?
+
+  // Version tracking
+  submission_number Int      @default(1)
+  is_current        Boolean  @default(true)
+  previous_submission_id String?
+
+  // Assessment lock status
+  is_locked         Boolean  @default(false)
+  locked_reason     String?
+
+  // Employee invitation
+  invitation_id     String?
+
+  // Timestamps
+  created_at        DateTime @default(now())
+  updated_at        DateTime @updatedAt
+  deleted_at        DateTime?
+
+  // Relations
+  user              User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  organization      Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  assessment        Assessment @relation(fields: [assessment_id], references: [id], onDelete: Cascade)
+  invitation        EmployeeInvitation? @relation(fields: [invitation_id], references: [id], onDelete: SetNull)
+  answers           AssessmentAnswer[]
+  result            AssessmentResult?
+
+  @@unique([user_id, assessment_id, submission_number])
+  @@index([organization_id])
+  @@index([assessment_id])
+  @@index([status])
+  @@index([is_locked])
+  @@index([invitation_id])
+}
+
+model AssessmentAnswer {
+  id                String   @id @default(cuid())
+  submission_id     String
+  question_id       String
+
+  // Response
+  answer_value      Int      @default(0)
+  answer_text       String?
+
+  // Timing
+  time_spent_seconds Int     @default(0)
+
+  // Timestamps
+  created_at        DateTime @default(now())
+  updated_at        DateTime @updatedAt
+
+  // Relations
+  submission        AssessmentSubmission @relation(fields: [submission_id], references: [id], onDelete: Cascade)
+  question          AssessmentQuestion @relation(fields: [question_id], references: [id], onDelete: Cascade)
+
+  @@unique([submission_id, question_id])
+  @@index([submission_id])
+  @@index([question_id])
+}
+
+// ============================================
+// 5. RESULTS & SCORING
+// ============================================
+
+model AssessmentResult {
+  id                String   @id @default(cuid())
+  user_id           String
+  organization_id   String
+  assessment_id     String
+  submission_id     String   @unique
+
+  // OCEAN Scores
+  openness_score    Float?   @default(0)
+  conscientiousness_score Float? @default(0)
+  extraversion_score Float?  @default(0)
+  agreeableness_score Float? @default(0)
+  neuroticism_score Float?  @default(0)
+
+  // Overall
+  overall_score     Float    @default(0)
+  percentile        Int?
+
+  // Assessment version
+  result_version    String   @default("1.0.0")
+  is_current        Boolean  @default(true)
+  previous_result_id String?
+
+  // AI Interpretation
+  ai_interpretation String?
+  ai_generated_at   DateTime?
+  ai_model          String?  @default("claude-3-sonnet")
+
+  // Timestamps
+  calculated_at     DateTime @default(now())
+  shared_at         DateTime?
+  created_at        DateTime @default(now())
+  updated_at        DateTime @updatedAt
+  deleted_at        DateTime?
+
+  // Relations
+  user              User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  organization      Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  assessment        Assessment @relation(fields: [assessment_id], references: [id], onDelete: Cascade)
+  submission        AssessmentSubmission @relation(fields: [submission_id], references: [id], onDelete: Cascade)
+  shareable_badge   ShareableBadge?
+
+  @@unique([user_id, assessment_id, submission_id])
+  @@index([organization_id])
+  @@index([assessment_id])
+  @@index([is_current])
+}
+
+// ============================================
+// 6. PERSONALITY PROFILES
+// ============================================
+
+model PersonalityProfile {
+  id                String   @id @default(cuid())
+  user_id           String
+  organization_id   String
+
+  // Consolidated scores
+  openness_score    Float?   @default(0)
+  conscientiousness_score Float? @default(0)
+  extraversion_score Float?  @default(0)
+  agreeableness_score Float? @default(0)
+  neuroticism_score Float?  @default(0)
+
+  // Profile version
+  version           Int      @default(1)
+  is_current        Boolean  @default(true)
+
+  // Metadata
+  result_ids        String[]
+
+  // Timestamps
+  created_at        DateTime @default(now())
+  updated_at        DateTime @updatedAt
+
+  // Relations
+  organization      Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, organization_id])
+  @@index([is_current])
+}
+
+// ============================================
+// 7. SHAREABLE BADGES
+// ============================================
+
+model ShareableBadge {
+  id                String   @id @default(cuid())
+  user_id           String
+  result_id         String   @unique
+
+  // Share token
+  share_token       String   @unique @default(cuid())
+  share_url         String   @unique
+
+  // Privacy settings
+  is_public         Boolean  @default(false)
+  published_at      DateTime?
+  expires_at        DateTime?
+
+  // Shared elements
+  shared_elements   Json     @default("{}")
+
+  // Access tracking
+  view_count        Int      @default(0)
+  last_viewed_at    DateTime?
+
+  // Custom settings
+  display_name      String?
+  custom_message    String?
+
+  // Timestamps
+  created_at        DateTime @default(now())
+  updated_at        DateTime @updatedAt
+  deleted_at        DateTime?
+
+  // Relations
+  user              User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  result            AssessmentResult @relation(fields: [result_id], references: [id], onDelete: Cascade)
+
+  @@index([share_token])
+  @@index([user_id])
+  @@index([is_public])
+}
+
+// ============================================
+// 8. EMPLOYEE INVITATIONS
+// ============================================
+
+model EmployeeInvitation {
+  id                String   @id @default(cuid())
+  organization_id   String
+  sender_id         String
+  recipient_email   String
+
+  // Invitation details
+  first_name        String?
+  last_name         String?
+  department        String?
+  job_title         String?
+
+  // Unique link
+  invitation_token  String   @unique @default(cuid())
+  invitation_url    String   @unique
+
+  // Expiry
+  expires_at        DateTime
+
+  // Status
+  status            String   @default("pending")
+  accepted_at       DateTime?
+  accepted_by_user_id String?
+
+  // Assessment
+  assessment_id     String
+
+  // Timestamps
+  created_at        DateTime @default(now())
+  updated_at        DateTime @updatedAt
+
+  // Relations
+  organization      Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  sender            User     @relation("sender", fields: [sender_id], references: [id], onDelete: Cascade)
+  recipient         User?    @relation("recipient", fields: [accepted_by_user_id], references: [id], onDelete: SetNull)
+  assessment        Assessment @relation(fields: [assessment_id], references: [id], onDelete: Cascade)
+  submissions       AssessmentSubmission[]
+
+  @@index([organization_id])
+  @@index([recipient_email])
+  @@index([status])
+  @@index([expires_at])
+}
+
+// ============================================
+// 9. CUSTOM ASSESSMENTS
+// ============================================
+
+model CustomAssessment {
+  id                String   @id @default(cuid())
+  organization_id   String
+  created_by        String
+
+  // Basic info
+  name              String
+  description       String?
+
+  // Configuration
+  total_questions   Int      @default(0)
+
+  // Timestamps
+  created_at        DateTime @default(now())
+  updated_at        DateTime @updatedAt
+  published_at      DateTime?
+  deleted_at        DateTime?
+
+  // Relations
+  organization      Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+
+  @@index([organization_id])
+  @@index([created_by])
+}
+
+// ============================================
+// 10. PAYMENTS & SUBSCRIPTIONS
+// ============================================
+
+model Payment {
+  id                String   @id @default(cuid())
+  organization_id   String
+  user_id           String?
+
+  // Payment details
+  amount            Float
+  currency          String   @default("USD")
+  status            String   @default("pending")
+  payment_method    String
+
+  // Payment processor
+  payment_provider  String   @default("paystack")
+  provider_reference String  @unique
+
+  // Paystack specifics
+  paystack_reference String?
+  authorization_url String?
+  access_code       String?
+
+  // Assessment/Subscription
+  payment_type      String
+  assessment_id     String?
+  subscription_plan String?
+
+  // Metadata
+  description       String?
+  metadata          Json     @default("{}")
+
+  // Timestamps
+  created_at        DateTime @default(now())
+  updated_at        DateTime @updatedAt
+  processed_at      DateTime?
+
+  // Relations
+  organization      Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+
+  @@index([organization_id])
+  @@index([status])
+  @@index([payment_provider])
+  @@index([provider_reference])
+}
+
+model Subscription {
+  id                String   @id @default(cuid())
+  organization_id   String   @unique
+
+  // Subscription details
+  plan_name         String
+  status            String   @default("inactive")
+
+  // Billing
+  billing_cycle     String   @default("monthly")
+  amount            Float
+  currency          String   @default("USD")
+
+  // Period
+  start_date        DateTime
+  end_date          DateTime
+  auto_renew        Boolean  @default(true)
+
+  // Usage limits
+  seats_used        Int      @default(0)
+  seats_limit       Int      @default(10)
+
+  // Timestamps
+  created_at        DateTime @default(now())
+  updated_at        DateTime @updatedAt
+  cancelled_at      DateTime?
+
+  // Relations
+  organization      Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+
+  @@index([status])
+}
+
+// ============================================
+// 11. AUDIT LOGS
+// ============================================
+
+model AuditLog {
+  id                String   @id @default(cuid())
+  organization_id   String
+  user_id           String
+  actor_id          String
+
+  // Action details
+  action            String
+  resource_type     String
+  resource_id       String
+
+  // Changes
+  changes           Json?
+
+  // Context
+  ip_address        String?
+  user_agent        String?
+  status            String   @default("success")
+  error_message     String?
+
+  // Timestamps
+  created_at        DateTime @default(now())
+
+  // Relations
+  organization      Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  user              User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  actor             User     @relation("actor", fields: [actor_id], references: [id], onDelete: Cascade)
+
+  @@index([organization_id])
+  @@index([user_id])
+  @@index([action])
+  @@index([resource_type])
+  @@index([created_at])
+}
+
+// ============================================
+// 12. REPORTS & EXPORTS
+// ============================================
+
+model Report {
+  id                String   @id @default(cuid())
+  organization_id   String
+  user_id           String
+
+  // Report details
+  report_type       String
+  title             String
+
+  // Content
+  pdf_url           String?
+  generated_at      DateTime
+
+  // Timestamps
+  created_at        DateTime @default(now())
+  updated_at        DateTime @updatedAt
+  deleted_at        DateTime?
+
+  // Relations
+  organization      Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+
+  @@index([organization_id])
+  @@index([report_type])
+}

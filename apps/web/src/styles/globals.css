@@ -1,0 +1,65 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Global styles */
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  @apply antialiased;
+}
+
+/* Typography */
+h1 {
+  @apply text-4xl font-bold;
+}
+
+h2 {
+  @apply text-3xl font-bold;
+}
+
+h3 {
+  @apply text-2xl font-bold;
+}
+
+/* Buttons */
+button {
+  @apply transition-colors duration-200;
+}
+
+/* Links */
+a {
+  @apply transition-colors duration-200;
+}
+
+/* Forms */
+input,
+textarea,
+select {
+  @apply rounded border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500;
+}
+
+input:disabled,
+textarea:disabled,
+select:disabled {
+  @apply bg-gray-100 cursor-not-allowed;
+}
+
+/* Utility classes */
+.container-max {
+  @apply max-w-7xl mx-auto px-4;
+}
+
+.btn-primary {
+  @apply bg-primary-600 text-white px-4 py-2 rounded hover:bg-primary-700 transition disabled:opacity-50 disabled:cursor-not-allowed;
+}
+
+.btn-secondary {
+  @apply bg-gray-200 text-gray-900 px-4 py-2 rounded hover:bg-gray-300 transition;
+}
+
+.card {
+  @apply bg-white rounded-lg shadow-md p-6;
+}
