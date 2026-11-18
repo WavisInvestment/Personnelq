@@ -18,7 +18,6 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 COPY apps/api/package.json apps/api/package.json
 COPY apps/web/package.json apps/web/package.json
-COPY packages ./packages
 # Dev dependencies stay: the Prisma CLI (migrations) and ts-node (seed, admin script) run inside this image.
 RUN npm ci --include=dev --workspace=@personnelq/api --include-workspace-root=false
 

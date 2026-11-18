@@ -16,7 +16,6 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 COPY apps/web/package.json apps/web/package.json
 COPY apps/api/package.json apps/api/package.json
-COPY packages ./packages
 RUN npm ci --include=dev --workspace=@personnelq/web --include-workspace-root=false
 
 COPY apps/web apps/web
