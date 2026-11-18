@@ -1,13 +1,11 @@
 import axios, { AxiosInstance, AxiosError } from 'axios';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+import { getApiUrl } from '@/lib/api-url';
 
 class ApiClient {
   private api: AxiosInstance;
 
   constructor() {
     this.api = axios.create({
-      baseURL: API_URL,
       headers: {
         'Content-Type': 'application/json',
       },
@@ -15,6 +13,8 @@ class ApiClient {
 
     // Add request interceptor to attach JWT token
     this.api.interceptors.request.use((config) => {
+      // Resolved per request, so it always matches the address the page was opened from.
+      config.baseURL = getApiUrl();
       if (typeof window !== 'undefined') {
         const token = localStorage.getItem('access_token');
         if (token) {
@@ -39,7 +39,7 @@ class ApiClient {
               throw new Error('No refresh token');
             }
 
-            const response = await axios.post(`${API_URL}/auth/refresh`, {
+            const response = await axios.post(`${getApiUrl()}/auth/refresh`, {
               refresh_token,
             });
 
@@ -91,6 +91,10 @@ class ApiClient {
 
   put(url: string, data?: any, config?: any) {
     return this.api.put(url, data, config);
+  }
+
+  patch(url: string, data?: any, config?: any) {
+    return this.api.patch(url, data, config);
   }
 
   delete(url: string, config?: any) {

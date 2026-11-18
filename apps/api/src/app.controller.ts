@@ -1,28 +1,12 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, VERSION_NEUTRAL } from '@nestjs/common';
+import { SkipThrottle } from '@nestjs/throttler';
 
-@Controller()
+// Not versioned: load balancers and Docker call this address.
+@Controller({ version: VERSION_NEUTRAL })
 export class AppController {
+  @SkipThrottle()
   @Get('health')
   health() {
     return { status: 'ok', timestamp: new Date().toISOString() };
-  }
-
-  @Get()
-  root() {
-    return {
-      app: 'Personality Badge API',
-      version: '0.1.0',
-      status: 'running',
-      endpoints: {
-        health: '/health',
-        auth: {
-          signup: 'POST /auth/signup',
-          login: 'POST /auth/login',
-          refresh: 'POST /auth/refresh',
-          logout: 'POST /auth/logout',
-          profile: 'POST /auth/me',
-        },
-      },
-    };
   }
 }

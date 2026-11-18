@@ -6,7 +6,6 @@ import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { JwtAuthGuard } from './guards/jwt.guard';
-import { PrismaService } from '../../database/prisma.service';
 
 @Module({
   imports: [
@@ -16,14 +15,14 @@ import { PrismaService } from '../../database/prisma.service';
       useFactory: async (configService: ConfigService) => ({
         secret: configService.get<string>('JWT_SECRET'),
         signOptions: {
-          expiresIn: configService.get<string>('JWT_EXPIRY') || '900s',
+          expiresIn: (configService.get<string>('JWT_EXPIRY') || '900s') as any,
         },
       }),
       inject: [ConfigService],
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, JwtAuthGuard, PrismaService],
+  providers: [AuthService, JwtStrategy, JwtAuthGuard],
   exports: [AuthService, JwtAuthGuard, JwtModule],
 })
 export class AuthModule {}

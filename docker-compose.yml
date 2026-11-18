@@ -3,13 +3,13 @@ version: '3.9'
 services:
   postgres:
     image: postgres:15-alpine
-    container_name: personality_badge_postgres
+    container_name: personnelq_postgres
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: personality_badge_dev
+      POSTGRES_DB: personnelq_dev
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -18,24 +18,11 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - personality_badge_network
-
-  redis:
-    image: redis:7-alpine
-    container_name: personality_badge_redis
-    ports:
-      - "6379:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - personality_badge_network
+      - personnelq_network
 
   pgadmin:
     image: dpage/pgadmin4:latest
-    container_name: personality_badge_pgadmin
+    container_name: personnelq_pgadmin
     environment:
       PGADMIN_DEFAULT_EMAIL: admin@example.com
       PGADMIN_DEFAULT_PASSWORD: admin
@@ -45,12 +32,12 @@ services:
       postgres:
         condition: service_healthy
     networks:
-      - personality_badge_network
+      - personnelq_network
 
 volumes:
   postgres_data:
     driver: local
 
 networks:
-  personality_badge_network:
+  personnelq_network:
     driver: bridge

@@ -1,178 +1,237 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import axios from 'axios';
+import { AccountTypePicker } from '@/components/account-type-picker';
+import { AuthShell } from '@/components/auth-shell';
+import { InvitationSummary } from '@/components/invitation-summary';
+import { Alert } from '@/components/ui/alert';
+import { Button, ButtonLink } from '@/components/ui/button';
+import { Field, PasswordChecklist, PasswordField, isPasswordValid } from '@/components/ui/field';
+import { ACCOUNT_TYPE_OPTIONS, type AccountType } from '@/lib/account-types';
+import { authApi, getErrorMessage, safeNext, saveSession, homeFor } from '@/lib/auth';
+import { INVALID_INVITATION_TEXT, useInvitation } from '@/lib/use-invitation';
 
 export default function SignupPage() {
   const router = useRouter();
+  const invitation = useInvitation();
+  const invited = invitation.kind === 'ready' ? invitation : null;
+  const [next, setNext] = useState('');
+  useEffect(() => setNext(safeNext(new URLSearchParams(window.location.search).get('next'), '')), []);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [formData, setFormData] = useState({
-    email: '',
+  const [alreadyHasAccount, setAlreadyHasAccount] = useState(false);
+  const [confirmError, setConfirmError] = useState('');
+  const [accountType, setAccountType] = useState<AccountType>('individual');
+  const [form, setForm] = useState({
+    organization_name: '',
     first_name: '',
     last_name: '',
+    email: '',
     password: '',
     password_confirm: '',
   });
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    });
+  const selected = ACCOUNT_TYPE_OPTIONS.find((o) => o.value === accountType)!;
+  // From an invitation the person always joins as an individual: no choice of account type.
+  const isOrganization = !invited && accountType !== 'individual';
+  // Where to go afterwards: the invitation page, to accept it.
+  const destination = invited ? `/invite/${invited.token}` : safeNext(next, '/dashboard');
+  const authQuery = invited ? `?invite=${invited.token}` : next ? `?next=${encodeURIComponent(next)}` : '';
+
+  const update = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
+    if (e.target.name === 'password_confirm' || e.target.name === 'password') setConfirmError('');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
     setError('');
+    setAlreadyHasAccount(false);
 
+    if (!isPasswordValid(form.password)) {
+      setError('Your password doesn’t meet all the requirements yet.');
+      return;
+    }
+    if (form.password !== form.password_confirm) {
+      setConfirmError('Passwords don’t match');
+      return;
+    }
+
+    setLoading(true);
     try {
-      const response = await axios.post(
-        `${process.env.NEXT_PUBLIC_API_URL}/auth/signup`,
-        formData,
-      );
-
-      // Store tokens
-      localStorage.setItem('access_token', response.data.access_token);
-      localStorage.setItem('refresh_token', response.data.refresh_token);
-
-      // Redirect to dashboard
-      router.push('/dashboard');
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Signup failed. Please try again.');
-    } finally {
+      const { organization_name, ...person } = form;
+      const { data } = await authApi.post('/auth/signup', {
+        ...person,
+        // The address and account type come from the invitation, never from what was typed.
+        ...(invited ? { email: invited.info.email, account_type: 'individual', invitation_token: invited.token } : { account_type: accountType }),
+        ...(isOrganization && { organization_name: organization_name.trim() }),
+      });
+      saveSession(data);
+      // someone who signed up a company lands on it; an invitation or a ?next= address wins over that
+      router.push(invited || next ? destination : homeFor(data.user));
+    } catch (err) {
+      const message = getErrorMessage(err, 'We couldn’t create your account. Please try again.');
+      setAlreadyHasAccount(/already registered/i.test(message));
+      setError(/already registered/i.test(message) ? 'There is already an account with this email address.' : message);
       setLoading(false);
     }
   };
 
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-8">
-        <div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            Create Your Account
-          </h2>
-          <p className="mt-2 text-center text-sm text-gray-600">
-            Discover your personality in 5 minutes
-          </p>
-        </div>
-
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-          {error && (
-            <div className="rounded-md bg-red-50 p-4">
-              <p className="text-sm font-medium text-red-800">{error}</p>
-            </div>
-          )}
-
-          <div className="rounded-md shadow-sm space-y-4">
-            {/* Email */}
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
-                Email Address
-              </label>
-              <input
-                id="email"
-                name="email"
-                type="email"
-                required
-                value={formData.email}
-                onChange={handleChange}
-                className="appearance-none rounded-lg relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-primary-500 focus:border-primary-500"
-                placeholder="you@example.com"
-              />
-            </div>
-
-            {/* First Name */}
-            <div>
-              <label htmlFor="first_name" className="block text-sm font-medium text-gray-700 mb-1">
-                First Name
-              </label>
-              <input
-                id="first_name"
-                name="first_name"
-                type="text"
-                required
-                value={formData.first_name}
-                onChange={handleChange}
-                className="appearance-none rounded-lg relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-primary-500 focus:border-primary-500"
-                placeholder="John"
-              />
-            </div>
-
-            {/* Last Name */}
-            <div>
-              <label htmlFor="last_name" className="block text-sm font-medium text-gray-700 mb-1">
-                Last Name
-              </label>
-              <input
-                id="last_name"
-                name="last_name"
-                type="text"
-                required
-                value={formData.last_name}
-                onChange={handleChange}
-                className="appearance-none rounded-lg relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-primary-500 focus:border-primary-500"
-                placeholder="Doe"
-              />
-            </div>
-
-            {/* Password */}
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
-                Password
-              </label>
-              <input
-                id="password"
-                name="password"
-                type="password"
-                required
-                value={formData.password}
-                onChange={handleChange}
-                className="appearance-none rounded-lg relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-primary-500 focus:border-primary-500"
-                placeholder="••••••••"
-              />
-              <p className="mt-1 text-xs text-gray-500">
-                Minimum 8 characters, including uppercase, lowercase, number, and special character
-              </p>
-            </div>
-
-            {/* Confirm Password */}
-            <div>
-              <label htmlFor="password_confirm" className="block text-sm font-medium text-gray-700 mb-1">
-                Confirm Password
-              </label>
-              <input
-                id="password_confirm"
-                name="password_confirm"
-                type="password"
-                required
-                value={formData.password_confirm}
-                onChange={handleChange}
-                className="appearance-none rounded-lg relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-primary-500 focus:border-primary-500"
-                placeholder="••••••••"
-              />
-            </div>
+  if (invitation.kind === 'invalid') {
+    return (
+      <AuthShell title="This invitation can’t be used">
+        <div className="space-y-5">
+          <Alert tone="info">{INVALID_INVITATION_TEXT[invitation.reason]}</Alert>
+          <div className="flex flex-wrap gap-3">
+            <ButtonLink href="/auth/login">Sign in</ButtonLink>
+            <ButtonLink href="/" variant="secondary">
+              Go to Personnelq
+            </ButtonLink>
           </div>
+        </div>
+      </AuthShell>
+    );
+  }
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {loading ? 'Creating account...' : 'Create Account'}
-          </button>
-        </form>
+  if (invitation.kind === 'loading') {
+    return (
+      <AuthShell title="Join your team">
+        <div className="space-y-4" aria-hidden="true">
+          <div className="h-28 animate-pulse rounded-2xl bg-paper-soft" />
+          <div className="h-11 animate-pulse rounded-xl bg-paper-soft" />
+          <div className="h-11 animate-pulse rounded-xl bg-paper-soft" />
+        </div>
+      </AuthShell>
+    );
+  }
 
-        <p className="mt-2 text-center text-sm text-gray-600">
+  return (
+    <AuthShell
+      title={invited ? `Join ${invited.info.organization_name}` : 'Create your account'}
+      subtitle={
+        invited
+          ? 'Create your account to accept the invitation.'
+          : isOrganization
+            ? `Set up ${selected.label.toLowerCase().replace(/^a /, 'your ')} and start with a free snapshot of your own personality.`
+            : 'Start with a free snapshot of your personality. It takes about five minutes.'
+      }
+      footer={
+        <>
           Already have an account?{' '}
-          <Link href="/auth/login" className="font-medium text-primary-600 hover:text-primary-500">
+          <Link href={`/auth/login${authQuery}`} className="font-medium text-brand-700 underline-offset-4 hover:underline">
             Sign in
           </Link>
-        </p>
-      </div>
-    </div>
+        </>
+      }
+    >
+      <form className="space-y-5" onSubmit={handleSubmit}>
+        {error && (
+          <Alert tone="error">
+            {error}
+            {alreadyHasAccount && (
+              <>
+                {' '}
+                <Link href={`/auth/login${authQuery}`} className="font-medium underline underline-offset-4">
+                  Sign in instead
+                </Link>
+                {invited ? ' to accept the invitation.' : '.'}
+              </>
+            )}
+          </Alert>
+        )}
+
+        {invited ? <InvitationSummary info={invited.info} /> : <AccountTypePicker value={accountType} onChange={setAccountType} />}
+
+        {isOrganization && (
+          <Field
+            label={selected.organizationLabel ?? 'Organisation name'}
+            name="organization_name"
+            autoComplete="organization"
+            required
+            minLength={2}
+            maxLength={100}
+            value={form.organization_name}
+            onChange={update}
+            placeholder={selected.organizationPlaceholder}
+            hint="You’ll be its administrator."
+          />
+        )}
+
+        <div className="grid gap-5 sm:grid-cols-2">
+          <Field
+            label="First name"
+            name="first_name"
+            autoComplete="given-name"
+            required
+            minLength={2}
+            maxLength={50}
+            value={form.first_name}
+            onChange={update}
+          />
+          <Field
+            label="Last name"
+            name="last_name"
+            autoComplete="family-name"
+            required
+            minLength={2}
+            maxLength={50}
+            value={form.last_name}
+            onChange={update}
+          />
+        </div>
+
+        {invited ? (
+          <Field
+            label="Email"
+            name="email"
+            type="email"
+            autoComplete="email"
+            readOnly
+            value={invited.info.email}
+            className="cursor-not-allowed bg-paper-soft text-ink-soft"
+            hint="From your invitation. It can’t be changed."
+          />
+        ) : (
+          <Field
+            label={isOrganization ? 'Work email' : 'Email'}
+            name="email"
+            type="email"
+            autoComplete="email"
+            required
+            value={form.email}
+            onChange={update}
+            placeholder="you@example.com"
+          />
+        )}
+
+        <div>
+          <PasswordField
+            label="Password"
+            name="password"
+            autoComplete="new-password"
+            required
+            value={form.password}
+            onChange={update}
+          />
+          <PasswordChecklist value={form.password} />
+        </div>
+
+        <PasswordField
+          label="Confirm password"
+          name="password_confirm"
+          autoComplete="new-password"
+          required
+          value={form.password_confirm}
+          onChange={update}
+          error={confirmError}
+        />
+
+        <Button type="submit" size="lg" className="w-full" loading={loading}>
+          {loading ? 'Creating account' : invited ? 'Create account and continue' : 'Create account'}
+        </Button>
+      </form>
+    </AuthShell>
   );
 }

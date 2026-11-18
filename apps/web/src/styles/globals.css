@@ -2,64 +2,170 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Global styles */
-html {
-  scroll-behavior: smooth;
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-paper font-sans text-ink antialiased;
+  }
+
+  h1,
+  h2,
+  h3 {
+    @apply font-display tracking-[-0.025em] text-ink;
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  /* Emphasis inside a headline stays in the headline font and style: no random italics or font swaps. */
+  h1 em,
+  h2 em,
+  h3 em {
+    font-style: normal;
+  }
+
+  ::selection {
+    background: theme('colors.accent.400');
+    color: #fff;
+  }
+
+  /* Hide the browser's built-in password reveal; the custom toggle replaces it */
+  input::-ms-reveal,
+  input::-ms-clear {
+    display: none;
+  }
+
+  ::selection {
+    @apply bg-brand-200 text-brand-950;
+  }
+
+  :focus-visible {
+    @apply outline-none ring-2 ring-brand-500 ring-offset-2 ring-offset-paper;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
 }
 
-body {
-  @apply antialiased;
+/* Content eases in as it scrolls into view (sequence cue). Progressive: browsers without scroll-driven
+   animations, and visitors who prefer reduced motion, just see the content. */
+@keyframes reveal {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
-/* Typography */
-h1 {
-  @apply text-4xl font-bold;
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    .reveal {
+      animation: reveal linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 35%;
+    }
+  }
 }
 
-h2 {
-  @apply text-3xl font-bold;
+/* A faint paper grain so large flat areas don't feel sterile. Fixed, ignores the pointer, and never repaints with scrolling. */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.07;
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
 }
 
-h3 {
-  @apply text-2xl font-bold;
+/* Children of .stagger rise in one after another instead of all at once. */
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
-/* Buttons */
-button {
-  @apply transition-colors duration-200;
+@media (prefers-reduced-motion: no-preference) {
+  .stagger > * {
+    animation: rise 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  .stagger > *:nth-child(2) { animation-delay: 60ms; }
+  .stagger > *:nth-child(3) { animation-delay: 120ms; }
+  .stagger > *:nth-child(4) { animation-delay: 180ms; }
+  .stagger > *:nth-child(5) { animation-delay: 240ms; }
+  .stagger > *:nth-child(6) { animation-delay: 300ms; }
+  .stagger > *:nth-child(n + 7) { animation-delay: 360ms; }
 }
 
-/* Links */
-a {
-  @apply transition-colors duration-200;
+/* Messages and alerts ease in so a change on screen is noticed. */
+@keyframes notice {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  [role="alert"], [role="status"]:not(:empty) { animation: notice 0.25s ease-out both; }
 }
 
-/* Forms */
-input,
-textarea,
-select {
-  @apply rounded border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500;
+/* The dimmed area behind a confirm dialog: brand-tinted and slightly blurred, not the browser's flat grey. */
+dialog::backdrop {
+  background: rgb(19 66 59 / 0.38);
+  backdrop-filter: blur(3px);
 }
 
-input:disabled,
-textarea:disabled,
-select:disabled {
-  @apply bg-gray-100 cursor-not-allowed;
+/* ---- Hand-made details --------------------------------------------------------------------------------------- */
+
+/* A marker stroke under a word: slightly wavy, not a straight CSS underline. */
+.marker {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 12' preserveAspectRatio='none'><path d='M2 7.5C28 3 52 10 82 6.2S140 3.4 168 7.4s24 .6 30-2' fill='none' stroke='%23dd5a33' stroke-width='3.4' stroke-linecap='round'/></svg>");
+  background-repeat: no-repeat;
+  background-position: 0 100%;
+  background-size: 100% 0.32em;
+  padding-bottom: 0.14em;
 }
 
-/* Utility classes */
-.container-max {
-  @apply max-w-7xl mx-auto px-4;
+/* Paper that sits slightly off-true: a card or note that has been placed by hand, not snapped to a grid. */
+.tilt-l {
+  transform: rotate(-1.6deg);
+}
+.tilt-r {
+  transform: rotate(1.2deg);
+}
+.paper {
+  background-color: theme('colors.paper.DEFAULT');
+  box-shadow: 0 1px 0 rgba(27, 33, 30, 0.06), 0 14px 28px -18px rgba(27, 33, 30, 0.35);
 }
 
-.btn-primary {
-  @apply bg-primary-600 text-white px-4 py-2 rounded hover:bg-primary-700 transition disabled:opacity-50 disabled:cursor-not-allowed;
+/* A hand-ruled divider in place of a perfect 1px line. */
+.rule-hand {
+  height: 10px;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 10' preserveAspectRatio='none'><path d='M0 5.5C60 3 100 7.5 170 5S300 3.5 400 6' fill='none' stroke='%23c2bba8' stroke-width='1.4' stroke-linecap='round'/></svg>");
+  background-size: 100% 100%;
 }
 
-.btn-secondary {
-  @apply bg-gray-200 text-gray-900 px-4 py-2 rounded hover:bg-gray-300 transition;
-}
-
-.card {
-  @apply bg-white rounded-lg shadow-md p-6;
+/* A quiet label. */
+.note {
+  color: theme('colors.ink.muted');
 }

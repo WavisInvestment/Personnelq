@@ -46,3 +46,7 @@ temp/
 # Misc
 *.tmp
 .env.*.local
+
+# Documentation stays local, not on GitHub
+docs/
+DOCS/

@@ -1,26 +1,34 @@
-﻿{
-    "version":  "0.1.0",
-    "name":  "personality-badge-platform",
-    "description":  "Personality assessment SaaS platform MVP",
-    "scripts":  {
-                    "lint":  "npm run lint --prefix apps/web \u0026\u0026 npm run lint --prefix apps/api",
-                    "install:all":  "npm install \u0026\u0026 npm install --prefix apps/web \u0026\u0026 npm install --prefix apps/api",
-                    "format":  "prettier --write .",
-                    "format:check":  "prettier --check .",
-                    "build":  "npm run build --prefix apps/web \u0026\u0026 npm run build --prefix apps/api",
-                    "test:ci":  "npm run test:ci --prefix apps/web \u0026\u0026 npm run test:ci --prefix apps/api",
-                    "dev":  "npm run dev --prefix apps/web \u0026 npm run dev --prefix apps/api",
-                    "test":  "npm run test --prefix apps/web \u0026\u0026 npm run test --prefix apps/api"
-                },
-    "workspaces":  [
-                       "apps/web",
-                       "apps/api",
-                       "packages/*"
-                   ],
-    "devDependencies":  {
-                            "prettier":  "^3.0.0",
-                            "@types/node":  "^20.0.0",
-                            "eslint":  "^8.50.0"
-                        },
-    "private":  true
+{
+  "version": "0.1.0",
+  "name": "personnelq",
+  "description": "Personality assessment SaaS platform MVP",
+  "scripts": {
+    "lint": "npm run lint --prefix apps/web && npm run lint --prefix apps/api",
+    "install:all": "npm install && npm install --prefix apps/web && npm install --prefix apps/api",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "build": "npm run build --prefix apps/web && npm run build --prefix apps/api",
+    "test:ci": "npm run test:ci --prefix apps/web && npm run test:ci --prefix apps/api",
+    "dev": "npm run dev --prefix apps/web & npm run dev --prefix apps/api",
+    "test": "npm run test --prefix apps/web && npm run test --prefix apps/api",
+    "e2e": "node tests/e2e/run.js"
+  },
+  "workspaces": [
+    "apps/web",
+    "apps/api",
+    "packages/*"
+  ],
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "eslint": "^8.50.0",
+    "prettier": "^3.0.0",
+    "typescript": "5.3.3"
+  },
+  "private": true,
+  "dependencies": {
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  }
 }

@@ -1,25 +1,29 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import axios from 'axios';
+import { AuthShell } from '@/components/auth-shell';
+import { InvitationSummary } from '@/components/invitation-summary';
+import { Alert } from '@/components/ui/alert';
+import { Button, ButtonLink } from '@/components/ui/button';
+import { Field, PasswordField } from '@/components/ui/field';
+import { authApi, getErrorMessage, safeNext, saveSession, homeFor } from '@/lib/auth';
+import { INVALID_INVITATION_TEXT, useInvitation } from '@/lib/use-invitation';
 
 export default function LoginPage() {
   const router = useRouter();
+  const invitation = useInvitation();
+  const invited = invitation.kind === 'ready' ? invitation : null;
+  // An invitation link sends people here with ?invite=..., so they come back to it after signing in.
+  const [next, setNext] = useState('');
+  useEffect(() => setNext(safeNext(new URLSearchParams(window.location.search).get('next'), '')), []);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [formData, setFormData] = useState({
-    email: '',
-    password: '',
-  });
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    });
-  };
+  const authQuery = invited ? `?invite=${invited.token}` : next ? `?next=${encodeURIComponent(next)}` : '';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -27,104 +31,110 @@ export default function LoginPage() {
     setError('');
 
     try {
-      const response = await axios.post(
-        `${process.env.NEXT_PUBLIC_API_URL}/auth/login`,
-        formData,
-      );
-
-      // Store tokens
-      localStorage.setItem('access_token', response.data.access_token);
-      localStorage.setItem('refresh_token', response.data.refresh_token);
-      localStorage.setItem('user', JSON.stringify(response.data.user));
-
-      // Redirect to dashboard
-      router.push('/dashboard');
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Login failed. Please check your credentials.');
-    } finally {
+      // From an invitation the address is the invited one, whatever the form held.
+      const { data } = await authApi.post('/auth/login', { email: invited ? invited.info.email : email, password });
+      saveSession(data);
+      router.push(invited ? `/invite/${invited.token}` : safeNext(next, homeFor(data.user)));
+    } catch (err) {
+      setError(getErrorMessage(err, 'Sign in failed. Please check your details and try again.'));
       setLoading(false);
     }
   };
 
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-8">
-        <div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            Sign In to Your Account
-          </h2>
-          <p className="mt-2 text-center text-sm text-gray-600">
-            Continue your personality journey
-          </p>
-        </div>
-
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-          {error && (
-            <div className="rounded-md bg-red-50 p-4">
-              <p className="text-sm font-medium text-red-800">{error}</p>
-            </div>
-          )}
-
-          <div className="rounded-md shadow-sm space-y-4">
-            {/* Email */}
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
-                Email Address
-              </label>
-              <input
-                id="email"
-                name="email"
-                type="email"
-                required
-                value={formData.email}
-                onChange={handleChange}
-                className="appearance-none rounded-lg relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-primary-500 focus:border-primary-500"
-                placeholder="you@example.com"
-              />
-            </div>
-
-            {/* Password */}
-            <div>
-              <div className="flex justify-between items-center mb-1">
-                <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-                  Password
-                </label>
-                <Link
-                  href="/auth/forgot-password"
-                  className="text-sm font-medium text-primary-600 hover:text-primary-500"
-                >
-                  Forgot?
-                </Link>
-              </div>
-              <input
-                id="password"
-                name="password"
-                type="password"
-                required
-                value={formData.password}
-                onChange={handleChange}
-                className="appearance-none rounded-lg relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-primary-500 focus:border-primary-500"
-                placeholder="••••••••"
-              />
-            </div>
+  if (invitation.kind === 'invalid') {
+    return (
+      <AuthShell title="This invitation can’t be used">
+        <div className="space-y-5">
+          <Alert tone="info">{INVALID_INVITATION_TEXT[invitation.reason]}</Alert>
+          <div className="flex flex-wrap gap-3">
+            <ButtonLink href="/auth/login">Sign in without it</ButtonLink>
+            <ButtonLink href="/" variant="secondary">
+              Go to Personnelq
+            </ButtonLink>
           </div>
+        </div>
+      </AuthShell>
+    );
+  }
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {loading ? 'Signing in...' : 'Sign In'}
-          </button>
-        </form>
+  if (invitation.kind === 'loading') {
+    return (
+      <AuthShell title="Sign in">
+        <div className="space-y-4" aria-hidden="true">
+          <div className="h-28 animate-pulse rounded-2xl bg-paper-soft" />
+          <div className="h-11 animate-pulse rounded-xl bg-paper-soft" />
+          <div className="h-11 animate-pulse rounded-xl bg-paper-soft" />
+        </div>
+      </AuthShell>
+    );
+  }
 
-        <p className="mt-2 text-center text-sm text-gray-600">
-          Don't have an account?{' '}
-          <Link href="/auth/signup" className="font-medium text-primary-600 hover:text-primary-500">
-            Create one
+  return (
+    <AuthShell
+      title={invited ? `Sign in to join ${invited.info.organization_name}` : 'Welcome back'}
+      subtitle={invited ? 'Use the account for the email address your invitation was sent to.' : 'Sign in to pick up where you left off.'}
+      footer={
+        <>
+          New here?{' '}
+          <Link href={`/auth/signup${authQuery}`} className="font-medium text-brand-700 underline-offset-4 hover:underline">
+            {invited ? 'Create your account' : 'Create an account'}
           </Link>
-        </p>
-      </div>
-    </div>
+        </>
+      }
+    >
+      <form className="space-y-5" onSubmit={handleSubmit}>
+        {error && <Alert tone="error">{error}</Alert>}
+
+        {invited && <InvitationSummary info={invited.info} />}
+
+        {invited ? (
+          <Field
+            label="Email"
+            name="email"
+            type="email"
+            autoComplete="email"
+            readOnly
+            value={invited.info.email}
+            className="cursor-not-allowed bg-paper-soft text-ink-soft"
+            hint="From your invitation. It can’t be changed."
+          />
+        ) : (
+          <Field
+            label="Email"
+            name="email"
+            type="email"
+            autoComplete="email"
+            required
+            autoFocus
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="you@example.com"
+          />
+        )}
+
+        <PasswordField
+          label="Password"
+          name="password"
+          autoComplete="current-password"
+          required
+          autoFocus={!!invited}
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder="Your password"
+          labelAction={
+            <Link
+              href="/auth/forgot-password"
+              className="text-sm font-medium text-brand-700 underline-offset-4 hover:underline"
+            >
+              Forgot password?
+            </Link>
+          }
+        />
+
+        <Button type="submit" size="lg" className="w-full" loading={loading}>
+          {loading ? 'Signing in' : invited ? 'Sign in and continue' : 'Sign in'}
+        </Button>
+      </form>
+    </AuthShell>
   );
 }
