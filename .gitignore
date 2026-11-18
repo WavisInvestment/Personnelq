@@ -50,3 +50,8 @@ temp/
 # Documentation stays local, not on GitHub
 docs/
 DOCS/
+
+# Client documents and screenshots stay local
+screenshots/
+*.docx
+/personality badge 2.0.pdf
